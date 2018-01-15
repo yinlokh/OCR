@@ -18,7 +18,8 @@ class QuestionSearchHeuristic(val service: GoogleSearchService?) : Heuristic {
     val EMPTY = HeuristicOutput(ImmutableMap.of<String, Int>())
 
     override fun compute(input: HeuristicInput): Observable<HeuristicOutput> {
-        if (service == null) {
+        val longestUniqueWords = selectUniqueLongestSubstring(input.answers)
+        if (service == null || longestUniqueWords.contains(null)) {
             return Observable.just(EMPTY)
         }
 
@@ -28,10 +29,35 @@ class QuestionSearchHeuristic(val service: GoogleSearchService?) : Heuristic {
                     override fun apply(body: ResponseBody): HeuristicOutput {
                         val lowerCase = body.string().toLowerCase()
                         return HeuristicOutput(ImmutableMap.copyOf(
-                                input.answers.associateBy(
+                                longestUniqueWords.filterNotNull().associateBy(
                                     {it : String -> it},
-                                    {it -> lowerCase.split(it).size})))
+                                    {it -> lowerCase.split(it).size - 1})))
                     }
                 })
+    }
+
+    /**
+     * Answers may contain words separated by spaces, in which case these words may not ever be
+     * a full substring inside search results.  Instead a better approach is to extract the longest
+     * unique word from the answer to use as an indicator.  e.g. Mt Evererst will result in unique
+     * substring of "everest"
+     */
+    private fun selectUniqueLongestSubstring(answers: List<String>): List<String?> {
+        // first create histogram of substrings after splitting using spaces
+        val answersAsWords = answers.map { answer ->
+            answer.toLowerCase()
+                    .split(" ")
+                    .distinct()
+        }
+
+        val histogram = HashMap<String, Int>()
+        answersAsWords.flatten().forEach({ word -> histogram.put(word, histogram.get(word) ?: 0 + 1) })
+
+        return answersAsWords.map { words ->
+            words
+                    .sortedByDescending { word -> word.length }
+                    .filter({ word -> histogram.get(word) ?: 0 == 1 })
+                    .firstOrNull()
+        }
     }
 }
