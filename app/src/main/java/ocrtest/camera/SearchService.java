@@ -11,6 +11,6 @@ import retrofit2.http.Query;
 
 public interface SearchService {
 
-    @GET("")
+    @GET("search")
     Observable<ResponseBody> search(@Query("q") String query);
 }
