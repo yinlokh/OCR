@@ -1,4 +1,4 @@
-package ocrtest.camera;
+package ocrtest.camera.services;
 
 import io.reactivex.Observable;
 import ocrtest.camera.models.CloudVisionRequests;

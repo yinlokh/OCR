@@ -1,18 +1,17 @@
-package ocrtest.camera
+package ocrtest.camera.heuristics.partial_search
 
-import android.os.PatternMatcher
 import io.reactivex.Observable
 import io.reactivex.schedulers.Schedulers
-import java.util.regex.Matcher
+import ocrtest.camera.services.GoogleSearchService
 import java.util.regex.Pattern
 
 /**
  * Helper to get number of search results given a query
  */
-class GoogleSearchHelper(val searchService : SearchService) {
+class GoogleSearchHelper(val searchService : GoogleSearchService) {
 
     // About 9,870,000,000 results
-    val PATTERN = Pattern.compile("About ([0-9,]+) results")
+    private val PATTERN = Pattern.compile("About ([0-9,]+) results")
 
     fun getResultCount(query : String) : Observable<Int> {
         return searchService.search(query)
@@ -20,7 +19,7 @@ class GoogleSearchHelper(val searchService : SearchService) {
                 .map({responseBody -> extractMatchCount(responseBody.string())})
     }
 
-    fun extractMatchCount(page: String) : Int {
+    private fun extractMatchCount(page: String) : Int {
         val matcher = PATTERN.matcher(page)
         if (matcher.find()) {
             return Integer.parseInt(
