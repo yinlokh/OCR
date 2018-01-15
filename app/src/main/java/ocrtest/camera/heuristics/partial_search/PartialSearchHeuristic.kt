@@ -9,12 +9,15 @@ import ocrtest.camera.heuristics.Heuristic
 import ocrtest.camera.heuristics.HeuristicInput
 import ocrtest.camera.heuristics.HeuristicOutput
 import ocrtest.camera.services.GoogleSearchService
+import ocrtest.camera.utils.ConsoleLogStream
 
 /**
  * A heuristic which ranks answers based on matches from a Google search query combining the
  * question and an answer choice.
  */
-class PartialSearchHeuristic(val service: GoogleSearchService?) : Heuristic {
+class PartialSearchHeuristic(
+        val service: GoogleSearchService?,
+        val consoleLogStream: ConsoleLogStream) : Heuristic {
 
     val EMPTY = HeuristicOutput(ImmutableMap.of<String, Int>())
 
@@ -38,12 +41,17 @@ class PartialSearchHeuristic(val service: GoogleSearchService?) : Heuristic {
                         }
                         val scores = builder.build()
                         if (scores.size != input.answers.size) {
+                            consoleLogStream.write("Partial search failed")
+                            consoleLogStream.writeDivider()
                             return HeuristicOutput(ImmutableMap.of<String, Int>())
                         }
-                        return HeuristicOutput(ImmutableMap.copyOf(
-                                input.answers
-                                        .withIndex()
-                                        .associateBy({it.value}, {scores[it.index]})))
+
+                        val results = input.answers
+                                .withIndex()
+                                .associateBy({it.value}, {scores[it.index]})
+                        consoleLogStream.write("Partial search results: \n" + results )
+                        consoleLogStream.writeDivider()
+                        return HeuristicOutput(ImmutableMap.copyOf(results))
                     }
                 })
     }

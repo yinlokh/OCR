@@ -8,18 +8,23 @@ import ocrtest.camera.heuristics.Heuristic
 import ocrtest.camera.heuristics.HeuristicInput
 import ocrtest.camera.heuristics.HeuristicOutput
 import ocrtest.camera.services.GoogleSearchService
+import ocrtest.camera.utils.ConsoleLogStream
 import okhttp3.ResponseBody
 
 /**
  * Heuristic to generate histogram of answer appearance
  */
-class QuestionSearchHeuristic(val service: GoogleSearchService?) : Heuristic {
+class QuestionSearchHeuristic(
+        val service: GoogleSearchService?,
+        val consoleLogStream: ConsoleLogStream) : Heuristic {
 
     val EMPTY = HeuristicOutput(ImmutableMap.of<String, Int>())
 
     override fun compute(input: HeuristicInput): Observable<HeuristicOutput> {
         val longestUniqueWords = selectUniqueLongestSubstring(input.answers)
         if (service == null || longestUniqueWords.contains(null)) {
+            consoleLogStream.write("QuestionSearch failed.")
+            consoleLogStream.writeDivider()
             return Observable.just(EMPTY)
         }
 
@@ -28,10 +33,12 @@ class QuestionSearchHeuristic(val service: GoogleSearchService?) : Heuristic {
                 .map(object : Function<ResponseBody, HeuristicOutput>{
                     override fun apply(body: ResponseBody): HeuristicOutput {
                         val lowerCase = body.string().toLowerCase()
-                        return HeuristicOutput(ImmutableMap.copyOf(
-                                longestUniqueWords.filterNotNull().associateBy(
-                                    {it : String -> it},
-                                    {it -> lowerCase.split(it).size - 1})))
+                        val results = longestUniqueWords.filterNotNull().associateBy(
+                                {it : String -> it},
+                                {it -> lowerCase.split(it).size - 1})
+                        consoleLogStream.write("question search results: " + results)
+                        consoleLogStream.writeDivider()
+                        return HeuristicOutput(ImmutableMap.copyOf(results))
                     }
                 })
     }
@@ -43,7 +50,6 @@ class QuestionSearchHeuristic(val service: GoogleSearchService?) : Heuristic {
      * substring of "everest"
      */
     private fun selectUniqueLongestSubstring(answers: List<String>): List<String?> {
-        // first create histogram of substrings after splitting using spaces
         val answersAsWords = answers.map { answer ->
             answer.toLowerCase()
                     .split(" ")

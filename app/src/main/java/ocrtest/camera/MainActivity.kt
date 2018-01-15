@@ -17,23 +17,23 @@ import android.support.v4.content.ContextCompat
 import android.util.Base64
 import android.view.Surface
 import android.view.TextureView
-import android.view.View
 import android.widget.Button
 import android.widget.TextView
 import com.facebook.stetho.okhttp3.StethoInterceptor
 import com.google.common.collect.ImmutableList
-import com.google.common.collect.ImmutableMap
 import com.jakewharton.retrofit2.adapter.rxjava2.RxJava2CallAdapterFactory
 import io.reactivex.Observable
 import io.reactivex.android.schedulers.AndroidSchedulers
 import io.reactivex.schedulers.Schedulers
 import ocrtest.camera.heuristics.HeuristicInput
 import ocrtest.camera.heuristics.HeuristicOutput
+import ocrtest.camera.heuristics.combination.CombinationHeuristic
 import ocrtest.camera.heuristics.partial_search.PartialSearchHeuristic
 import ocrtest.camera.heuristics.question_search.QuestionSearchHeuristic
 import ocrtest.camera.models.*
 import ocrtest.camera.services.CloudVisionService
 import ocrtest.camera.services.GoogleSearchService
+import ocrtest.camera.utils.ConsoleLogStream
 import okhttp3.OkHttpClient
 import retrofit2.Retrofit
 import retrofit2.converter.gson.GsonConverterFactory
@@ -56,6 +56,7 @@ class MainActivity : AppCompatActivity(), TextureView.SurfaceTextureListener {
     var cameraManager : CameraManager? = null
     var camera : CameraDevice? = null
     var searchService : GoogleSearchService? = null
+    var consoleLogs : ConsoleLogStream = ConsoleLogStream()
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -64,13 +65,7 @@ class MainActivity : AppCompatActivity(), TextureView.SurfaceTextureListener {
         console = findViewById(R.id.console)
         previewSurface = findViewById(R.id.preview_surface)
         previewSurface?.surfaceTextureListener = this
-        console?.append("\nSetting click listener")
-        captureButton?.setOnClickListener(object : View.OnClickListener {
-            override fun onClick(v: View?) {
-                console?.append("\nAttempting capture")
-                capture()
-            }
-        })
+        captureButton?.setOnClickListener { capture() }
         cameraManager = getSystemService(Context.CAMERA_SERVICE) as CameraManager
         var okHttpClient = OkHttpClient.Builder().addNetworkInterceptor(StethoInterceptor()).build()
         var retrofitBuilder = Retrofit.Builder()
@@ -88,6 +83,9 @@ class MainActivity : AppCompatActivity(), TextureView.SurfaceTextureListener {
                 .client(okHttpClient)
                 .build()
         searchService = retrofitBuilder.create(GoogleSearchService::class.java)
+        consoleLogs.logs()
+                .observeOn(AndroidSchedulers.mainThread())
+                .subscribe({log -> console?.append("\n" + log)})
     }
 
     override fun onSurfaceTextureSizeChanged(surface: SurfaceTexture?, width: Int, height: Int) {
@@ -111,7 +109,6 @@ class MainActivity : AppCompatActivity(), TextureView.SurfaceTextureListener {
         }
 
         try {
-            console?.append("\nNumber of cameras: " + cameraManager!!.cameraIdList!!.size)
             for (cameraId in cameraManager!!.cameraIdList) {
                 val characteristic = cameraManager!!.getCameraCharacteristics(cameraId)
                 if (characteristic.get(LENS_FACING).equals(LENS_FACING_BACK)) {
@@ -125,7 +122,7 @@ class MainActivity : AppCompatActivity(), TextureView.SurfaceTextureListener {
     fun cameraOpen(id : String) : Boolean {
         if (ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA)
                 != PackageManager.PERMISSION_GRANTED) {
-            console?.append("\nMissing Camera Permission, Cannot open camera.")
+            consoleLogs.write("Missing Camera Permission, Cannot open camera.")
             return false
         }
         cameraManager!!.openCamera(id, CameraCallback(this), null)
@@ -141,14 +138,13 @@ class MainActivity : AppCompatActivity(), TextureView.SurfaceTextureListener {
             surfaces.add(surface)
         }
 
-        console?.append("\nStarting preview")
         previewSurface?.surfaceTexture?.setDefaultBufferSize(320, 240)
         var previewRequestBuilder = camera?.createCaptureRequest(CameraDevice.TEMPLATE_PREVIEW)
         if (surface != null) {
             previewRequestBuilder?.addTarget(surface as? Surface)
         }
 
-        console?.append("\nCreating capture session")
+        consoleLogs.write("Creating capture session")
         camera?.createCaptureSession(surfaces, StateCallback(this, previewRequestBuilder), null)
     }
 
@@ -174,12 +170,11 @@ class MainActivity : AppCompatActivity(), TextureView.SurfaceTextureListener {
         var stream = ByteArrayOutputStream()
         previewSurface?.getBitmap()?.compress(Bitmap.CompressFormat.JPEG, 50, stream)
         var byteArray = stream.toByteArray()
-        console?.setText("starting calculation")
-        console?.append("\n byte array size = " + byteArray.size)
-        retrofitCloudVisionCall(byteArray)
+        console?.setText("")
+        solveQuestion(byteArray)
     }
 
-    fun retrofitCloudVisionCall(image: ByteArray) {
+    fun solveQuestion(image: ByteArray) {
         val request = CloudVisionRequest(
                 CloudVisionImage(Base64.encodeToString(image, 0)),
                 CloudVisionFeatures("TEXT_DETECTION", "10")
@@ -188,40 +183,36 @@ class MainActivity : AppCompatActivity(), TextureView.SurfaceTextureListener {
        val requests = CloudVisionRequests(
                        ImmutableList.builder<CloudVisionRequest>().add(request).build())
         cloudVisionService?.annotate(GOOGLE_VISION_API_KEY, requests)
+                ?.map { responses -> responses.toTriviaQuestion() }
+                ?.filter( {question -> question != null })
+                ?.map { question -> question!! }
                 ?.subscribeOn(Schedulers.computation())
                 ?.observeOn(AndroidSchedulers.mainThread())
+                ?.doOnNext{ response -> showOCRText(response)}
                 ?.flatMap { response -> calculateHeuristics(response) }
                 ?.observeOn(AndroidSchedulers.mainThread())
                 ?.subscribe({answer -> showResults(answer)})
     }
 
-    fun calculateHeuristics(response: CloudVisionResponses) : Observable<HeuristicOutput> {
-        console?.setText("")
+    fun calculateHeuristics(question: TriviaQuestion) : Observable<HeuristicOutput> {
+        val partialSearch = PartialSearchHeuristic(searchService, consoleLogs)
+        val questionSearch = QuestionSearchHeuristic(searchService, consoleLogs)
+        val heuristic = CombinationHeuristic(ImmutableList.of(partialSearch, questionSearch))
+        return heuristic.compute(HeuristicInput(question))
+    }
 
-        // first annotation is the most confident one
-        val fullText = response.responses.get(0)?.textAnnotations?.get(0)?.description ?: ""
-        val lines = fullText.split('\n').filter { text -> text.length > 0 }
-        if (lines.size < 3) {
-            return Observable.just(HeuristicOutput(ImmutableMap.of()))
-        }
-
-        val answers = lines.subList(lines.size - 3, lines.size)
-        var questionBuilder = StringBuilder()
-        for (line in lines.subList(0, lines.size - 3)) {
-            questionBuilder.append(line)
-            questionBuilder.append(" ")
-        }
-        val question = questionBuilder.toString()
-        val input = HeuristicInput(question, answers)
-        val heuristic = QuestionSearchHeuristic(searchService)
-        return heuristic.compute(input)
+    fun showOCRText(question: TriviaQuestion) {
+        consoleLogs.write("question: " + question.question)
+        consoleLogs.write("choice 1: " + question.choices[0])
+        consoleLogs.write("choice 2: " + question.choices[1])
+        consoleLogs.write("choice 3: " + question.choices[2])
+        consoleLogs.writeDivider()
     }
 
     fun showResults(output: HeuristicOutput) {
         val answers = output.scores.keys.sortedByDescending { it -> output.scores[it] }
         for (answer in answers) {
-            console?.append(output.scores[answer].toString() + " ---> ")
-            console?.append(answer + "\n")
+            consoleLogs.write(output.scores[answer].toString() + " ---> " + answer)
         }
     }
 
@@ -244,8 +235,6 @@ class MainActivity : AppCompatActivity(), TextureView.SurfaceTextureListener {
             activity.captureSessionConfigured(session, requestBuilder)
         }
 
-        override fun onConfigureFailed(session: CameraCaptureSession?) {
-        }
-
+        override fun onConfigureFailed(session: CameraCaptureSession?) { }
     }
 }

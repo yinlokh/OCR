@@ -22,9 +22,13 @@ class GoogleSearchHelper(val searchService : GoogleSearchService) {
     private fun extractMatchCount(page: String) : Int {
         val matcher = PATTERN.matcher(page)
         if (matcher.find()) {
-            return Integer.parseInt(
-                    matcher.group(0)
-                            .filter { char -> (char >= '0' && char <= '9') })
+            try {
+                return Integer.parseInt(
+                        matcher.group(0)
+                                .filter { char -> (char >= '0' && char <= '9') })
+            } catch (exception : NumberFormatException) {
+                return Integer.MAX_VALUE
+            }
         }
         return 0
     }
