@@ -14,11 +14,22 @@ import android.hardware.camera2.CaptureRequest
 import android.support.v7.app.AppCompatActivity
 import android.os.Bundle
 import android.support.v4.content.ContextCompat
+import android.util.Base64
+import android.util.Log
 import android.view.Surface
 import android.view.TextureView
 import android.view.View
 import android.widget.Button
 import android.widget.TextView
+import com.facebook.stetho.okhttp3.StethoInterceptor
+import com.google.common.collect.ImmutableList
+import com.jakewharton.retrofit2.adapter.rxjava2.RxJava2CallAdapterFactory
+import io.reactivex.android.schedulers.AndroidSchedulers
+import io.reactivex.schedulers.Schedulers
+import ocrtest.camera.models.*
+import okhttp3.OkHttpClient
+import retrofit2.Retrofit
+import retrofit2.converter.gson.GsonConverterFactory
 import java.io.ByteArrayOutputStream
 
 /**
@@ -27,7 +38,11 @@ import java.io.ByteArrayOutputStream
  */
 class MainActivity : AppCompatActivity(), TextureView.SurfaceTextureListener {
 
+    val GOOGLE_VISION_BASE_URL = "https://vision.googleapis.com"
+    val GOOGLE_VISION_API_KEY = "" 
+
     var captureButton : Button? = null
+    var cloudVisionService : CloudVisionService? = null
     var console : TextView? = null
     var previewSurface : TextureView? = null
     var cameraManager : CameraManager? = null
@@ -48,6 +63,14 @@ class MainActivity : AppCompatActivity(), TextureView.SurfaceTextureListener {
             }
         })
         cameraManager = getSystemService(Context.CAMERA_SERVICE) as CameraManager
+        var okHttpClient = OkHttpClient.Builder().addNetworkInterceptor(StethoInterceptor()).build()
+        var retrofitBuilder = Retrofit.Builder()
+                .baseUrl(GOOGLE_VISION_BASE_URL)
+                .addConverterFactory(GsonConverterFactory.create())
+                .addCallAdapterFactory(RxJava2CallAdapterFactory.create())
+                .client(okHttpClient)
+                .build()
+        cloudVisionService = retrofitBuilder.create(CloudVisionService::class.java)
     }
 
     override fun onSurfaceTextureSizeChanged(surface: SurfaceTexture?, width: Int, height: Int) {
@@ -132,9 +155,51 @@ class MainActivity : AppCompatActivity(), TextureView.SurfaceTextureListener {
 
     fun capture() {
         var stream = ByteArrayOutputStream()
-        previewSurface?.getBitmap()?.compress(Bitmap.CompressFormat.PNG, 50, stream)
+        previewSurface?.getBitmap()?.compress(Bitmap.CompressFormat.JPEG, 50, stream)
         var byteArray = stream.toByteArray()
         console?.append("\n byte array size = " + byteArray.size)
+        retrofitCloudVisionCall(byteArray)
+    }
+
+    fun retrofitCloudVisionCall(image: ByteArray) {
+        val request = CloudVisionRequest(
+                CloudVisionImage(Base64.encodeToString(image, 0)),
+                CloudVisionFeatures("TEXT_DETECTION", "10")
+        )
+
+        val requestStartTime = System.currentTimeMillis()
+        val requests = CloudVisionRequests(
+                ImmutableList.builder<CloudVisionRequest>().add(request).build())
+        cloudVisionService?.annotate(GOOGLE_VISION_API_KEY, requests)
+                ?.subscribeOn(Schedulers.computation())
+                ?.observeOn(AndroidSchedulers.mainThread())
+                ?.doOnError({throwable -> Log.e("yinlokh", Log.getStackTraceString(throwable))})
+                ?.subscribe({response -> parseResponse(response, requestStartTime)})
+    }
+
+    fun parseResponse(response: CloudVisionResponses, responseStartTimeMs: Long) : Question? {
+        console?.setText("")
+        console?.append("\nResults(rtt " + (System.currentTimeMillis() - responseStartTimeMs) + "ms): ")
+
+        // first annotation is the most confident one
+        val question = response.responses.get(0)?.textAnnotations?.get(0)?.description ?: ""
+        val lines = question.split('\n')
+        if (lines.size >= 3) {
+            val answers = lines.subList(lines.size - 3 - 1, lines.size)
+            var questionBuilder = StringBuilder()
+            for (line in lines.subList(0, lines.size - 3 - 1)) {
+                questionBuilder.append(line)
+                questionBuilder.append(" ")
+            }
+            val question = questionBuilder.toString()
+            console?.append("\nQuestion: " + question)
+            console?.append("\nAnswers: ")
+            console?.append("\n1 - " + answers[0])
+            console?.append("\n2 - " + answers[1])
+            console?.append("\n3 - " + answers[2])
+            return Question(question, answers)
+        }
+        return null
     }
 
     class CameraCallback(var activity : MainActivity) : CameraDevice.StateCallback() {
