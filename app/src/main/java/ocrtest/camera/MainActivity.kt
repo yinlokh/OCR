@@ -3,6 +3,7 @@ package ocrtest.camera
 import android.Manifest
 import android.content.Context
 import android.content.pm.PackageManager
+import android.graphics.Bitmap
 import android.graphics.SurfaceTexture
 import android.hardware.camera2.CameraCaptureSession
 import android.hardware.camera2.CameraCharacteristics.LENS_FACING
@@ -15,7 +16,10 @@ import android.os.Bundle
 import android.support.v4.content.ContextCompat
 import android.view.Surface
 import android.view.TextureView
+import android.view.View
+import android.widget.Button
 import android.widget.TextView
+import java.io.ByteArrayOutputStream
 
 /**
  * Written with sample from
@@ -23,6 +27,7 @@ import android.widget.TextView
  */
 class MainActivity : AppCompatActivity(), TextureView.SurfaceTextureListener {
 
+    var captureButton : Button? = null
     var console : TextView? = null
     var previewSurface : TextureView? = null
     var cameraManager : CameraManager? = null
@@ -31,9 +36,17 @@ class MainActivity : AppCompatActivity(), TextureView.SurfaceTextureListener {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
+        captureButton = findViewById(R.id.capture_button)
         console = findViewById(R.id.console)
         previewSurface = findViewById(R.id.preview_surface)
         previewSurface?.surfaceTextureListener = this
+        console?.append("\nSetting click listener")
+        captureButton?.setOnClickListener(object : View.OnClickListener {
+            override fun onClick(v: View?) {
+                console?.append("\nAttempting capture")
+                capture()
+            }
+        })
         cameraManager = getSystemService(Context.CAMERA_SERVICE) as CameraManager
     }
 
@@ -118,7 +131,10 @@ class MainActivity : AppCompatActivity(), TextureView.SurfaceTextureListener {
     }
 
     fun capture() {
-        previewSurface?.getBitmap()
+        var stream = ByteArrayOutputStream()
+        previewSurface?.getBitmap()?.compress(Bitmap.CompressFormat.PNG, 50, stream)
+        var byteArray = stream.toByteArray()
+        console?.append("\n byte array size = " + byteArray.size)
     }
 
     class CameraCallback(var activity : MainActivity) : CameraDevice.StateCallback() {
