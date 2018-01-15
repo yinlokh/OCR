@@ -30,6 +30,7 @@ import io.reactivex.schedulers.Schedulers
 import ocrtest.camera.heuristics.HeuristicInput
 import ocrtest.camera.heuristics.HeuristicOutput
 import ocrtest.camera.heuristics.partial_search.PartialSearchHeuristic
+import ocrtest.camera.heuristics.question_search.QuestionSearchHeuristic
 import ocrtest.camera.models.*
 import ocrtest.camera.services.CloudVisionService
 import ocrtest.camera.services.GoogleSearchService
@@ -212,7 +213,7 @@ class MainActivity : AppCompatActivity(), TextureView.SurfaceTextureListener {
         }
         val question = questionBuilder.toString()
         val input = HeuristicInput(question, answers)
-        val heuristic = PartialSearchHeuristic(searchService)
+        val heuristic = QuestionSearchHeuristic(searchService)
         return heuristic.compute(input)
     }
 
