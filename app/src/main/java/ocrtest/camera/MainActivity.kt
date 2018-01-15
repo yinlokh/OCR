@@ -44,8 +44,9 @@ import java.io.ByteArrayOutputStream
  */
 class MainActivity : AppCompatActivity(), TextureView.SurfaceTextureListener {
 
-    val GOOGLE_VISION_BASE_URL = "https://vision.googleapis.com"
     val GOOGLE_SEARCH_BASE_URL = "http://www.google.com"
+    val GOOGLE_VISION_BASE_URL = "https://vision.googleapis.com"
+    val GOOGLE_VISION_API_KEY = ""
 
     var captureButton : Button? = null
     var cloudVisionService : CloudVisionService? = null
