@@ -28,14 +28,18 @@ class QuestionSearchHeuristic(
             return Observable.just(EMPTY)
         }
 
+        val answerToWords = input.answers.withIndex().associateBy (
+                {indexedValue -> indexedValue.value},
+                {indexedValue -> longestUniqueWords.get(indexedValue.index)})
+
         return service.search(input.question)
                 .subscribeOn(Schedulers.computation())
                 .map(object : Function<ResponseBody, HeuristicOutput>{
                     override fun apply(body: ResponseBody): HeuristicOutput {
                         val lowerCase = body.string().toLowerCase()
-                        val results = longestUniqueWords.filterNotNull().associateBy(
-                                {it : String -> it},
-                                {it -> lowerCase.split(it).size - 1})
+                        val results = input.answers.associateBy(
+                                {it -> it},
+                                {it -> lowerCase.split(answerToWords.get(it)?:"").size - 1})
                         consoleLogStream.write("question search results: " + results)
                         consoleLogStream.writeDivider()
                         return HeuristicOutput(ImmutableMap.copyOf(results))

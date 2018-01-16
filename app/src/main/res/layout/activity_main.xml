@@ -8,17 +8,28 @@
     android:padding="8dp"
     tools:context="ocrtest.camera.MainActivity">
 
-    <TextureView
-        android:id="@+id/preview_surface"
+    <FrameLayout
         android:layout_width="match_parent"
         android:layout_height="0dp"
-        android:layout_weight="2"/>
+        android:layout_weight="3">
+
+        <TextureView
+            android:id="@+id/preview_surface"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"/>
+
+        <ocrtest.camera.widgets.BoundingBoxView
+            android:id="@+id/bounding_box"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent" />
+
+    </FrameLayout>
 
     <ScrollView
         android:layout_width="match_parent"
         android:layout_height="0dp"
         android:layout_marginTop="8dp"
-        android:layout_weight="1">
+        android:layout_weight="2">
 
         <TextView
             android:id="@+id/console"

@@ -1,4 +1,4 @@
-package ocrtest.camera.heuristics.partial_search
+package ocrtest.camera.heuristics.question_answer_search
 
 import com.google.common.collect.ImmutableList
 import com.google.common.collect.ImmutableMap
@@ -15,7 +15,7 @@ import ocrtest.camera.utils.ConsoleLogStream
  * A heuristic which ranks answers based on matches from a Google search query combining the
  * question and an answer choice.
  */
-class PartialSearchHeuristic(
+class QuestionAnswerSearchHeuristic(
         val service: GoogleSearchService?,
         val consoleLogStream: ConsoleLogStream) : Heuristic {
 
@@ -41,7 +41,7 @@ class PartialSearchHeuristic(
                         }
                         val scores = builder.build()
                         if (scores.size != input.answers.size) {
-                            consoleLogStream.write("Partial search failed")
+                            consoleLogStream.write("Question&Answer search failed")
                             consoleLogStream.writeDivider()
                             return HeuristicOutput(ImmutableMap.of<String, Int>())
                         }
@@ -49,7 +49,7 @@ class PartialSearchHeuristic(
                         val results = input.answers
                                 .withIndex()
                                 .associateBy({it.value}, {scores[it.index]})
-                        consoleLogStream.write("Partial search results: \n" + results )
+                        consoleLogStream.write("Question&Answer: \n" + results )
                         consoleLogStream.writeDivider()
                         return HeuristicOutput(ImmutableMap.copyOf(results))
                     }

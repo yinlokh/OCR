@@ -1,4 +1,4 @@
-package ocrtest.camera.heuristics.partial_search
+package ocrtest.camera.heuristics.question_answer_search
 
 import io.reactivex.Observable
 import io.reactivex.schedulers.Schedulers

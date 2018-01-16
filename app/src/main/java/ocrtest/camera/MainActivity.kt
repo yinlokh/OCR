@@ -15,6 +15,7 @@ import android.support.v7.app.AppCompatActivity
 import android.os.Bundle
 import android.support.v4.content.ContextCompat
 import android.util.Base64
+import android.util.Log
 import android.view.Surface
 import android.view.TextureView
 import android.widget.Button
@@ -28,12 +29,13 @@ import io.reactivex.schedulers.Schedulers
 import ocrtest.camera.heuristics.HeuristicInput
 import ocrtest.camera.heuristics.HeuristicOutput
 import ocrtest.camera.heuristics.combination.CombinationHeuristic
-import ocrtest.camera.heuristics.partial_search.PartialSearchHeuristic
+import ocrtest.camera.heuristics.question_answer_search.QuestionAnswerSearchHeuristic
 import ocrtest.camera.heuristics.question_search.QuestionSearchHeuristic
 import ocrtest.camera.models.*
 import ocrtest.camera.services.CloudVisionService
 import ocrtest.camera.services.GoogleSearchService
 import ocrtest.camera.utils.ConsoleLogStream
+import ocrtest.camera.widgets.BoundingBoxView
 import okhttp3.OkHttpClient
 import retrofit2.Retrofit
 import retrofit2.converter.gson.GsonConverterFactory
@@ -49,6 +51,7 @@ class MainActivity : AppCompatActivity(), TextureView.SurfaceTextureListener {
     val GOOGLE_VISION_BASE_URL = "https://vision.googleapis.com"
     val GOOGLE_VISION_API_KEY = ""
 
+    var boundingBoxView: BoundingBoxView? = null
     var captureButton : Button? = null
     var cloudVisionService : CloudVisionService? = null
     var console : TextView? = null
@@ -61,6 +64,7 @@ class MainActivity : AppCompatActivity(), TextureView.SurfaceTextureListener {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
+        boundingBoxView = findViewById(R.id.bounding_box)
         captureButton = findViewById(R.id.capture_button)
         console = findViewById(R.id.console)
         previewSurface = findViewById(R.id.preview_surface)
@@ -168,7 +172,20 @@ class MainActivity : AppCompatActivity(), TextureView.SurfaceTextureListener {
 
     fun capture() {
         var stream = ByteArrayOutputStream()
-        previewSurface?.getBitmap()?.compress(Bitmap.CompressFormat.JPEG, 50, stream)
+        var startX : Int = boundingBoxView?.boxStartX?.toInt()?:0
+        var startY : Int = boundingBoxView?.boxStartY?.toInt()?:0
+        var endX : Int = boundingBoxView?.boxEndX?.toInt()?:0
+        var endY : Int = boundingBoxView?.boxEndY?.toInt()?:0
+        var bitmap = previewSurface?.getBitmap()
+        if (startX != endX && startY != endY) {
+            bitmap = Bitmap.createBitmap(
+                    bitmap,
+                    Math.min(startX, endX),
+                    Math.min(startY, endY),
+                    Math.abs(startX - endX),
+                    Math.abs(startY - endY))
+        }
+        bitmap?.compress(Bitmap.CompressFormat.JPEG, 50, stream)
         var byteArray = stream.toByteArray()
         console?.setText("")
         solveQuestion(byteArray)
@@ -184,20 +201,21 @@ class MainActivity : AppCompatActivity(), TextureView.SurfaceTextureListener {
                        ImmutableList.builder<CloudVisionRequest>().add(request).build())
         cloudVisionService?.annotate(GOOGLE_VISION_API_KEY, requests)
                 ?.map { responses -> responses.toTriviaQuestion() }
-                ?.filter( {question -> question != null })
-                ?.map { question -> question!! }
+                ?.doOnNext{ question -> if (question.question.length == 0) consoleLogs.write("could not read question.")}
+                ?.filter{ question -> question.question.length > 0}
                 ?.subscribeOn(Schedulers.computation())
                 ?.observeOn(AndroidSchedulers.mainThread())
                 ?.doOnNext{ response -> showOCRText(response)}
                 ?.flatMap { response -> calculateHeuristics(response) }
                 ?.observeOn(AndroidSchedulers.mainThread())
-                ?.subscribe({answer -> showResults(answer)})
+                ?.subscribe(
+                        {answer -> showResults(answer)})
     }
 
     fun calculateHeuristics(question: TriviaQuestion) : Observable<HeuristicOutput> {
-        val partialSearch = PartialSearchHeuristic(searchService, consoleLogs)
+        val questionAnswerSearch = QuestionAnswerSearchHeuristic(searchService, consoleLogs)
         val questionSearch = QuestionSearchHeuristic(searchService, consoleLogs)
-        val heuristic = CombinationHeuristic(ImmutableList.of(partialSearch, questionSearch))
+        val heuristic = CombinationHeuristic(ImmutableList.of(questionSearch, questionAnswerSearch))
         return heuristic.compute(HeuristicInput(question))
     }
 
