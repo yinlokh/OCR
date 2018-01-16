@@ -4,6 +4,7 @@ import com.google.common.collect.ImmutableList
 import com.google.common.collect.ImmutableMap
 import io.reactivex.Observable
 import io.reactivex.functions.Function
+import io.reactivex.schedulers.Schedulers
 import ocrtest.camera.heuristics.Heuristic
 import ocrtest.camera.heuristics.HeuristicInput
 import ocrtest.camera.heuristics.HeuristicOutput
@@ -23,7 +24,9 @@ class WikiAnswerSearchHeuristic(
         val wordcounter = WordCounter()
         val searches = input.answers.map {
             answer -> wikipediaSearchService?.search(answer)
-                ?.map { response -> wordcounter.countWords(response.string(), keywords) } }
+                ?.map { response -> wordcounter.countWords(response.string(), keywords) }
+                ?.onErrorReturn { 0 }
+                ?.subscribeOn(Schedulers.computation())}
         return Observable.combineLatest(searches,
                 object : Function<Array<Any>, HeuristicOutput> {
                     override fun apply(t: Array<Any>): HeuristicOutput {
@@ -54,7 +57,8 @@ class WikiAnswerSearchHeuristic(
     private fun getKeywordsFromQuestion(question: String): List<String> {
         val commonWords = CommonWords()
         return question
+                .toLowerCase()
                 .split(" ")
-                .filter { word -> !commonWords.WORD_SET.contains(word) }
+                .filter { word -> !commonWords.WORD_SET.contains(word) && word.length > 0 }
     }
 }
