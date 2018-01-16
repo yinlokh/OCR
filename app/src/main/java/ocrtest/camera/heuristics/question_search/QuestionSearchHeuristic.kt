@@ -8,6 +8,7 @@ import ocrtest.camera.heuristics.Heuristic
 import ocrtest.camera.heuristics.HeuristicInput
 import ocrtest.camera.heuristics.HeuristicOutput
 import ocrtest.camera.services.GoogleSearchService
+import ocrtest.camera.utils.CommonWords
 import ocrtest.camera.utils.ConsoleLogStream
 import okhttp3.ResponseBody
 
@@ -21,7 +22,7 @@ class QuestionSearchHeuristic(
     val EMPTY = HeuristicOutput(ImmutableMap.of<String, Int>())
 
     override fun compute(input: HeuristicInput): Observable<HeuristicOutput> {
-        val longestUniqueWords = selectUniqueLongestSubstring(input.answers)
+        val longestUniqueWords = selectUniqueLongestSubstrings(input.answers)
         if (service == null || longestUniqueWords.contains(null)) {
             consoleLogStream.write("QuestionSearch failed.")
             consoleLogStream.writeDivider()
@@ -39,8 +40,12 @@ class QuestionSearchHeuristic(
                         val lowerCase = body.string().toLowerCase()
                         val results = input.answers.associateBy(
                                 {it -> it},
-                                {it -> lowerCase.split(answerToWords.get(it)?:"").size - 1})
-                        consoleLogStream.write("question search results: " + results)
+                                {it -> countOccurrances(lowerCase, answerToWords.get(it))})
+                        consoleLogStream.write((
+                                "QuestionSearch relevant terms: \n"
+                                        + answerToWords
+                                        + "\nQuestionSearch results:"
+                                        + "\n" + results))
                         consoleLogStream.writeDivider()
                         return HeuristicOutput(ImmutableMap.copyOf(results))
                     }
@@ -53,7 +58,7 @@ class QuestionSearchHeuristic(
      * unique word from the answer to use as an indicator.  e.g. Mt Evererst will result in unique
      * substring of "everest"
      */
-    private fun selectUniqueLongestSubstring(answers: List<String>): List<String?> {
+    private fun selectUniqueLongestSubstrings(answers: List<String>): List<Set<String>?> {
         val answersAsWords = answers.map { answer ->
             answer.toLowerCase()
                     .split(" ")
@@ -61,13 +66,23 @@ class QuestionSearchHeuristic(
         }
 
         val histogram = HashMap<String, Int>()
+        val commonwords = CommonWords()
         answersAsWords.flatten().forEach({ word -> histogram.put(word, histogram.get(word) ?: 0 + 1) })
 
         return answersAsWords.map { words ->
             words
                     .sortedByDescending { word -> word.length }
                     .filter({ word -> histogram.get(word) ?: 0 == 1 })
-                    .firstOrNull()
+                    .filter({ word -> !commonwords.WORD_SET.contains(word)})
+                    .take(3)
+                    .toSet()
         }
+    }
+
+    private fun countOccurrances(content: String, words: Set<String>?): Int {
+        if (words == null) {
+            return 0
+        }
+        return words.fold(0, operation = {count, word -> count + content.split(word).size - 1})
     }
 }

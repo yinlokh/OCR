@@ -15,7 +15,6 @@ import android.support.v7.app.AppCompatActivity
 import android.os.Bundle
 import android.support.v4.content.ContextCompat
 import android.util.Base64
-import android.util.Log
 import android.view.Surface
 import android.view.TextureView
 import android.widget.Button
@@ -31,9 +30,11 @@ import ocrtest.camera.heuristics.HeuristicOutput
 import ocrtest.camera.heuristics.combination.CombinationHeuristic
 import ocrtest.camera.heuristics.question_answer_search.QuestionAnswerSearchHeuristic
 import ocrtest.camera.heuristics.question_search.QuestionSearchHeuristic
+import ocrtest.camera.heuristics.wiki_answer_search.WikiAnswerSearchHeuristic
 import ocrtest.camera.models.*
 import ocrtest.camera.services.CloudVisionService
 import ocrtest.camera.services.GoogleSearchService
+import ocrtest.camera.services.WikipediaSearchService
 import ocrtest.camera.utils.ConsoleLogStream
 import ocrtest.camera.widgets.BoundingBoxView
 import okhttp3.OkHttpClient
@@ -49,6 +50,7 @@ class MainActivity : AppCompatActivity(), TextureView.SurfaceTextureListener {
 
     val GOOGLE_SEARCH_BASE_URL = "http://www.google.com"
     val GOOGLE_VISION_BASE_URL = "https://vision.googleapis.com"
+    val WIKIPEDIA_SEARCH_BASE_URL = "https://en.wikipedia.org"
     val GOOGLE_VISION_API_KEY = ""
 
     var boundingBoxView: BoundingBoxView? = null
@@ -58,8 +60,9 @@ class MainActivity : AppCompatActivity(), TextureView.SurfaceTextureListener {
     var previewSurface : TextureView? = null
     var cameraManager : CameraManager? = null
     var camera : CameraDevice? = null
-    var searchService : GoogleSearchService? = null
+    var googleSearchService: GoogleSearchService? = null
     var consoleLogs : ConsoleLogStream = ConsoleLogStream()
+    var wikipediaSearchService : WikipediaSearchService? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -71,22 +74,12 @@ class MainActivity : AppCompatActivity(), TextureView.SurfaceTextureListener {
         previewSurface?.surfaceTextureListener = this
         captureButton?.setOnClickListener { capture() }
         cameraManager = getSystemService(Context.CAMERA_SERVICE) as CameraManager
-        var okHttpClient = OkHttpClient.Builder().addNetworkInterceptor(StethoInterceptor()).build()
-        var retrofitBuilder = Retrofit.Builder()
-                .baseUrl(GOOGLE_VISION_BASE_URL)
-                .addConverterFactory(GsonConverterFactory.create())
-                .addCallAdapterFactory(RxJava2CallAdapterFactory.create())
-                .client(okHttpClient)
-                .build()
-        cloudVisionService = retrofitBuilder.create(CloudVisionService::class.java)
-
-        retrofitBuilder = Retrofit.Builder()
-                .baseUrl(GOOGLE_SEARCH_BASE_URL)
-                .addConverterFactory(GsonConverterFactory.create())
-                .addCallAdapterFactory(RxJava2CallAdapterFactory.create())
-                .client(okHttpClient)
-                .build()
-        searchService = retrofitBuilder.create(GoogleSearchService::class.java)
+        cloudVisionService = getRetrofit(GOOGLE_VISION_BASE_URL)
+                .create(CloudVisionService::class.java)
+        googleSearchService = getRetrofit(GOOGLE_SEARCH_BASE_URL)
+                .create(GoogleSearchService::class.java)
+        wikipediaSearchService = getRetrofit(WIKIPEDIA_SEARCH_BASE_URL)
+                .create(WikipediaSearchService::class.java)
         consoleLogs.logs()
                 .observeOn(AndroidSchedulers.mainThread())
                 .subscribe({log -> console?.append("\n" + log)})
@@ -105,6 +98,16 @@ class MainActivity : AppCompatActivity(), TextureView.SurfaceTextureListener {
 
     override fun onSurfaceTextureAvailable(surface: SurfaceTexture?, width: Int, height: Int) {
         cameraOpen()
+    }
+
+    fun getRetrofit(baseUrl: String) : Retrofit {
+        var okHttpClient = OkHttpClient.Builder().addNetworkInterceptor(StethoInterceptor()).build()
+        return Retrofit.Builder()
+                .baseUrl(baseUrl)
+                .addConverterFactory(GsonConverterFactory.create())
+                .addCallAdapterFactory(RxJava2CallAdapterFactory.create())
+                .client(okHttpClient)
+                .build()
     }
 
     fun cameraOpen() {
@@ -142,7 +145,7 @@ class MainActivity : AppCompatActivity(), TextureView.SurfaceTextureListener {
             surfaces.add(surface)
         }
 
-        previewSurface?.surfaceTexture?.setDefaultBufferSize(320, 240)
+        previewSurface?.surfaceTexture?.setDefaultBufferSize(640, 480)
         var previewRequestBuilder = camera?.createCaptureRequest(CameraDevice.TEMPLATE_PREVIEW)
         if (surface != null) {
             previewRequestBuilder?.addTarget(surface as? Surface)
@@ -213,9 +216,13 @@ class MainActivity : AppCompatActivity(), TextureView.SurfaceTextureListener {
     }
 
     fun calculateHeuristics(question: TriviaQuestion) : Observable<HeuristicOutput> {
-        val questionAnswerSearch = QuestionAnswerSearchHeuristic(searchService, consoleLogs)
-        val questionSearch = QuestionSearchHeuristic(searchService, consoleLogs)
-        val heuristic = CombinationHeuristic(ImmutableList.of(questionSearch, questionAnswerSearch))
+        val questionAnswerSearch = QuestionAnswerSearchHeuristic(googleSearchService, consoleLogs)
+        val questionSearch = QuestionSearchHeuristic(googleSearchService, consoleLogs)
+        val wikiAnswerSearch = WikiAnswerSearchHeuristic(wikipediaSearchService, consoleLogs)
+        val heuristic = CombinationHeuristic(ImmutableList.of(
+                questionSearch,
+                questionAnswerSearch,
+                wikiAnswerSearch))
         return heuristic.compute(HeuristicInput(question))
     }
 
