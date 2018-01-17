@@ -32,6 +32,7 @@ import ocrtest.camera.heuristics.combination.CombinationHeuristic
 import ocrtest.camera.heuristics.question_answer_search.QuestionAnswerSearchHeuristic
 import ocrtest.camera.heuristics.question_search.QuestionSearchHeuristic
 import ocrtest.camera.heuristics.wiki_answer_search.WikiAnswerSearchHeuristic
+import ocrtest.camera.heuristics.wiki_question_search.WikiQuestionSearchHeuristic
 import ocrtest.camera.models.*
 import ocrtest.camera.services.CloudVisionService
 import ocrtest.camera.services.GoogleSearchService
@@ -203,7 +204,7 @@ class MainActivity : AppCompatActivity(), TextureView.SurfaceTextureListener {
                     Math.abs(startX - endX),
                     Math.abs(startY - endY))
         }
-        bitmap?.compress(Bitmap.CompressFormat.JPEG, 50, stream)
+        bitmap?.compress(Bitmap.CompressFormat.JPEG, 40, stream)
         var byteArray = stream.toByteArray()
         console?.setText("")
         solveQuestion(byteArray)
@@ -233,10 +234,12 @@ class MainActivity : AppCompatActivity(), TextureView.SurfaceTextureListener {
     fun calculateHeuristics(question: TriviaQuestion) : Observable<HeuristicOutput> {
         val questionAnswerSearch = QuestionAnswerSearchHeuristic(googleSearchService, consoleLogs)
         val questionSearch = QuestionSearchHeuristic(googleSearchService, consoleLogs)
+        val wikiQuestionSearch = WikiQuestionSearchHeuristic(wikipediaSearchService, consoleLogs)
         val wikiAnswerSearch = WikiAnswerSearchHeuristic(wikipediaSearchService, consoleLogs)
         val heuristic = CombinationHeuristic(ImmutableList.of(
                 questionSearch,
                 questionAnswerSearch,
+                wikiQuestionSearch,
                 wikiAnswerSearch))
         return heuristic.compute(HeuristicInput(question))
     }
@@ -255,7 +258,7 @@ class MainActivity : AppCompatActivity(), TextureView.SurfaceTextureListener {
 
     fun showResults(output: HeuristicOutput) {
         val answers = output.scores.keys.sortedByDescending { it -> output.scores[it] }
-        consoleLogs.write("Combined Scores: " + answers.toString())
+        consoleLogs.write("Descending order in likelihood: " + answers.toString())
     }
 
     class CameraCallback(var activity : MainActivity) : CameraDevice.StateCallback() {

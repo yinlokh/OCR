@@ -12,6 +12,7 @@ import ocrtest.camera.heuristics.ResultsMerger
 import ocrtest.camera.services.WikipediaSearchService
 import ocrtest.camera.utils.CommonWords
 import ocrtest.camera.utils.ConsoleLogStream
+import ocrtest.camera.utils.KeywordExtractor
 import ocrtest.camera.utils.WordCounter
 
 /**
@@ -25,7 +26,7 @@ class WikiAnswerSearchHeuristic(
         val wordcounter = WordCounter()
         val searches = input.answers.map {
             answer -> wikipediaSearchService?.search(answer)
-                ?.map { response -> wordcounter.countWords(response.string(), keywords) }
+                ?.map { response -> wordcounter.countWords(response.string().toLowerCase(), keywords) }
                 ?.onErrorReturn { 0.0 }
                 ?.subscribeOn(Schedulers.computation())}
         return Observable.combineLatest(searches,
@@ -55,10 +56,15 @@ class WikiAnswerSearchHeuristic(
 
     private fun getKeywordsFromQuestion(question: String): List<String> {
         val commonWords = CommonWords()
-        return question
-                .toLowerCase()
-                .replace("?", "")
-                .split(" ")
-                .filter { word -> !commonWords.WORD_SET.contains(word) && word.length > 2 }
+        val keywordExtractor = KeywordExtractor()
+        val keywords = keywordExtractor.extractKeywords(question)
+                .map { word -> word.replace("\"", "").toLowerCase() }
+        if (keywords.isEmpty()) {
+            return question.replace('?', ' ')
+                    .toLowerCase()
+                    .split(" "
+                    ).filter { word -> word.length > 2 && !commonWords.WORD_SET.contains(word) }
+        }
+        return keywords
     }
 }

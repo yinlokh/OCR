@@ -11,6 +11,7 @@ import ocrtest.camera.heuristics.ResultsMerger
 import ocrtest.camera.services.GoogleSearchService
 import ocrtest.camera.utils.CommonWords
 import ocrtest.camera.utils.ConsoleLogStream
+import ocrtest.camera.utils.OccurranceCounter
 import okhttp3.ResponseBody
 
 /**
@@ -24,6 +25,7 @@ class QuestionSearchHeuristic(
 
     override fun compute(input: HeuristicInput): Observable<HeuristicOutput> {
         val longestUniqueWords = selectUniqueLongestSubstrings(input.answers)
+        val counter = OccurranceCounter()
         if (service == null || longestUniqueWords.contains(null)) {
             consoleLogStream.write("QuestionSearch failed.")
             return Observable.just(EMPTY)
@@ -39,7 +41,7 @@ class QuestionSearchHeuristic(
                     override fun apply(body: ResponseBody): HeuristicOutput {
                         val lowerCase = body.string().toLowerCase()
                         val scores = input.answers
-                                .map{it -> countOccurrances(lowerCase, answerToWords.get(it))}
+                                .map{it -> counter.countOccurrances(lowerCase, answerToWords.get(it))}
                         val resultMerger = ResultsMerger()
                         val results = resultMerger.mergeResults(scores, input)
                         consoleLogStream.write((
@@ -77,12 +79,5 @@ class QuestionSearchHeuristic(
                     .take(3)
                     .toSet()
         }
-    }
-
-    private fun countOccurrances(content: String, words: Set<String>?): Double {
-        if (words == null) {
-            return 0.0
-        }
-        return words.fold(0, operation = {count, word -> count + content.split(word).size - 1}).toDouble()
     }
 }

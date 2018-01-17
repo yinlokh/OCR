@@ -27,7 +27,7 @@
             android:id="@+id/console_window"
             android:layout_width="match_parent"
             android:layout_height="match_parent"
-            android:background="#EEFFFFFF"
+            android:background="#DDFFFFFF"
             android:visibility="gone">
 
             <TextView
