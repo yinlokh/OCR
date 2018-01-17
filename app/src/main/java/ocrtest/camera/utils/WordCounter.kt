@@ -5,7 +5,7 @@ package ocrtest.camera.utils
  */
 class WordCounter {
 
-    fun countWords(content: String, words: Collection<String>) : Int {
-        return words.map{word -> content.split(word).size - 1}.sum()
+    fun countWords(content: String, words: Collection<String>) : Double {
+        return words.map{word -> content.split(word).size - 1}.sum().toDouble()
     }
 }

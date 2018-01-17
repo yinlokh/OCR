@@ -8,6 +8,7 @@ import io.reactivex.functions.Function
 import ocrtest.camera.heuristics.Heuristic
 import ocrtest.camera.heuristics.HeuristicInput
 import ocrtest.camera.heuristics.HeuristicOutput
+import ocrtest.camera.heuristics.ResultsMerger
 import ocrtest.camera.services.GoogleSearchService
 import ocrtest.camera.utils.ConsoleLogStream
 
@@ -19,7 +20,7 @@ class QuestionAnswerSearchHeuristic(
         val service: GoogleSearchService?,
         val consoleLogStream: ConsoleLogStream) : Heuristic {
 
-    val EMPTY = HeuristicOutput(ImmutableMap.of<String, Int>())
+    val EMPTY = HeuristicOutput(ImmutableMap.of<String, Double>())
 
     override fun compute(input: HeuristicInput): Observable<HeuristicOutput> {
         if (service == null) {
@@ -27,31 +28,28 @@ class QuestionAnswerSearchHeuristic(
         }
 
         val helper = GoogleSearchHelper(service)
-        val searchObservables : List<ObservableSource<Int>> = input.answers.map{
+        val searchObservables : List<ObservableSource<Double>> = input.answers.map{
             answer -> helper.getResultCount(input.question + " " + answer)}
-        return Observable.combineLatest<Int, HeuristicOutput>(
+        return Observable.combineLatest<Double, HeuristicOutput>(
                 searchObservables,
                 object : Function<Array<Any>, HeuristicOutput> {
                     override fun apply(t: Array<Any>): HeuristicOutput {
-                        val builder = ImmutableList.builder<Int>()
+                        val builder = ImmutableList.builder<Double>()
                         for (item in t) {
-                            if (item is Int) {
+                            if (item is Double) {
                                 builder.add(item)
                             }
                         }
                         val scores = builder.build()
                         if (scores.size != input.answers.size) {
-                            consoleLogStream.write("Question&Answer search failed")
-                            consoleLogStream.writeDivider()
-                            return HeuristicOutput(ImmutableMap.of<String, Int>())
+                            consoleLogStream.write("Question+Answer search failed")
+                            return HeuristicOutput(ImmutableMap.of<String, Double>())
                         }
 
-                        val results = input.answers
-                                .withIndex()
-                                .associateBy({it.value}, {scores[it.index]})
-                        consoleLogStream.write("Question&Answer: \n" + results )
-                        consoleLogStream.writeDivider()
-                        return HeuristicOutput(ImmutableMap.copyOf(results))
+                        val resultMerger = ResultsMerger()
+                        val results = resultMerger.mergeResults(scores, input)
+                        consoleLogStream.write("Question+Answer: \n" + results.scores )
+                        return results
                     }
                 })
     }

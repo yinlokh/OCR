@@ -7,6 +7,7 @@ import io.reactivex.schedulers.Schedulers
 import ocrtest.camera.heuristics.Heuristic
 import ocrtest.camera.heuristics.HeuristicInput
 import ocrtest.camera.heuristics.HeuristicOutput
+import ocrtest.camera.heuristics.ResultsMerger
 import ocrtest.camera.services.GoogleSearchService
 import ocrtest.camera.utils.CommonWords
 import ocrtest.camera.utils.ConsoleLogStream
@@ -19,13 +20,12 @@ class QuestionSearchHeuristic(
         val service: GoogleSearchService?,
         val consoleLogStream: ConsoleLogStream) : Heuristic {
 
-    val EMPTY = HeuristicOutput(ImmutableMap.of<String, Int>())
+    val EMPTY = HeuristicOutput(ImmutableMap.of<String, Double>())
 
     override fun compute(input: HeuristicInput): Observable<HeuristicOutput> {
         val longestUniqueWords = selectUniqueLongestSubstrings(input.answers)
         if (service == null || longestUniqueWords.contains(null)) {
             consoleLogStream.write("QuestionSearch failed.")
-            consoleLogStream.writeDivider()
             return Observable.just(EMPTY)
         }
 
@@ -38,16 +38,16 @@ class QuestionSearchHeuristic(
                 .map(object : Function<ResponseBody, HeuristicOutput>{
                     override fun apply(body: ResponseBody): HeuristicOutput {
                         val lowerCase = body.string().toLowerCase()
-                        val results = input.answers.associateBy(
-                                {it -> it},
-                                {it -> countOccurrances(lowerCase, answerToWords.get(it))})
+                        val scores = input.answers
+                                .map{it -> countOccurrances(lowerCase, answerToWords.get(it))}
+                        val resultMerger = ResultsMerger()
+                        val results = resultMerger.mergeResults(scores, input)
                         consoleLogStream.write((
-                                "QuestionSearch relevant terms: \n"
+                                "QuestionOnly Search matching terms: \n"
                                         + answerToWords
-                                        + "\nQuestionSearch results:"
-                                        + "\n" + results))
-                        consoleLogStream.writeDivider()
-                        return HeuristicOutput(ImmutableMap.copyOf(results))
+                                        + "\n\nQuestionOnly Search Results:"
+                                        + "\n" + results.scores))
+                        return results
                     }
                 })
     }
@@ -79,10 +79,10 @@ class QuestionSearchHeuristic(
         }
     }
 
-    private fun countOccurrances(content: String, words: Set<String>?): Int {
+    private fun countOccurrances(content: String, words: Set<String>?): Double {
         if (words == null) {
-            return 0
+            return 0.0
         }
-        return words.fold(0, operation = {count, word -> count + content.split(word).size - 1})
+        return words.fold(0, operation = {count, word -> count + content.split(word).size - 1}).toDouble()
     }
 }

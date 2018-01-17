@@ -23,27 +23,44 @@
             android:layout_width="match_parent"
             android:layout_height="match_parent" />
 
+        <ScrollView
+            android:id="@+id/console_window"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:background="#EEFFFFFF"
+            android:visibility="gone">
+
+            <TextView
+                android:id="@+id/console"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:textSize="18sp"
+                tools:text="console text"/>
+
+        </ScrollView>
+
     </FrameLayout>
 
-    <ScrollView
+    <LinearLayout
         android:layout_width="match_parent"
-        android:layout_height="0dp"
-        android:layout_marginTop="8dp"
-        android:layout_weight="2">
+        android:layout_height="wrap_content">
 
-        <TextView
-            android:id="@+id/console"
-            android:layout_width="match_parent"
+        <Button
+            android:id="@+id/capture_button"
+            android:layout_width="0dp"
             android:layout_height="wrap_content"
-            tools:text="console text"/>
+            android:layout_weight="1"
+            android:layout_marginTop="8dp"
+            android:text="Analyze"/>
 
-    </ScrollView>
+        <Button
+            android:id="@+id/console_button"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:layout_marginTop="8dp"
+            android:text="Toggle Console"/>
 
-    <Button
-        android:id="@+id/capture_button"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:layout_marginTop="8dp"
-        android:text="capture"/>
+    </LinearLayout>
 
 </LinearLayout>

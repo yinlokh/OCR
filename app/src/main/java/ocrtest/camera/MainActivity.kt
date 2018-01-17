@@ -17,6 +17,7 @@ import android.support.v4.content.ContextCompat
 import android.util.Base64
 import android.view.Surface
 import android.view.TextureView
+import android.view.View
 import android.widget.Button
 import android.widget.TextView
 import com.facebook.stetho.okhttp3.StethoInterceptor
@@ -57,6 +58,8 @@ class MainActivity : AppCompatActivity(), TextureView.SurfaceTextureListener {
     var captureButton : Button? = null
     var cloudVisionService : CloudVisionService? = null
     var console : TextView? = null
+    var consoleButton: Button? = null
+    var consoleWindow: View? = null
     var previewSurface : TextureView? = null
     var cameraManager : CameraManager? = null
     var camera : CameraDevice? = null
@@ -70,9 +73,21 @@ class MainActivity : AppCompatActivity(), TextureView.SurfaceTextureListener {
         boundingBoxView = findViewById(R.id.bounding_box)
         captureButton = findViewById(R.id.capture_button)
         console = findViewById(R.id.console)
+        consoleButton = findViewById(R.id.console_button)
+        consoleWindow = findViewById(R.id.console_window)
         previewSurface = findViewById(R.id.preview_surface)
         previewSurface?.surfaceTextureListener = this
-        captureButton?.setOnClickListener { capture() }
+        captureButton?.setOnClickListener {
+            capture()
+            consoleWindow?.visibility = View.VISIBLE
+        }
+        consoleButton?.setOnClickListener {
+            if (consoleWindow?.visibility == View.VISIBLE) {
+                consoleWindow?.visibility = View.GONE
+            } else {
+                consoleWindow?.visibility = View.VISIBLE
+            }
+        }
         cameraManager = getSystemService(Context.CAMERA_SERVICE) as CameraManager
         cloudVisionService = getRetrofit(GOOGLE_VISION_BASE_URL)
                 .create(CloudVisionService::class.java)
@@ -82,7 +97,7 @@ class MainActivity : AppCompatActivity(), TextureView.SurfaceTextureListener {
                 .create(WikipediaSearchService::class.java)
         consoleLogs.logs()
                 .observeOn(AndroidSchedulers.mainThread())
-                .subscribe({log -> console?.append("\n" + log)})
+                .subscribe({log -> console?.append(log+"\n====================\n")})
     }
 
     override fun onSurfaceTextureSizeChanged(surface: SurfaceTexture?, width: Int, height: Int) {
@@ -227,18 +242,20 @@ class MainActivity : AppCompatActivity(), TextureView.SurfaceTextureListener {
     }
 
     fun showOCRText(question: TriviaQuestion) {
-        consoleLogs.write("question: " + question.question)
-        consoleLogs.write("choice 1: " + question.choices[0])
-        consoleLogs.write("choice 2: " + question.choices[1])
-        consoleLogs.write("choice 3: " + question.choices[2])
-        consoleLogs.writeDivider()
+        consoleLogs.write(
+                "Question: "
+                        + question.question
+                        + "\nChoice 1: "
+                        + question.choices[0]
+                        + "\nChoice 2: "
+                        + question.choices[1]
+                        + "\nChoice 3: "
+                        + question.choices[2])
     }
 
     fun showResults(output: HeuristicOutput) {
         val answers = output.scores.keys.sortedByDescending { it -> output.scores[it] }
-        for (answer in answers) {
-            consoleLogs.write(output.scores[answer].toString() + " ---> " + answer)
-        }
+        consoleLogs.write("Combined Scores: " + answers.toString())
     }
 
     class CameraCallback(var activity : MainActivity) : CameraDevice.StateCallback() {

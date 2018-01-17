@@ -8,6 +8,7 @@ import io.reactivex.schedulers.Schedulers
 import ocrtest.camera.heuristics.Heuristic
 import ocrtest.camera.heuristics.HeuristicInput
 import ocrtest.camera.heuristics.HeuristicOutput
+import ocrtest.camera.heuristics.ResultsMerger
 import ocrtest.camera.services.WikipediaSearchService
 import ocrtest.camera.utils.CommonWords
 import ocrtest.camera.utils.ConsoleLogStream
@@ -25,31 +26,29 @@ class WikiAnswerSearchHeuristic(
         val searches = input.answers.map {
             answer -> wikipediaSearchService?.search(answer)
                 ?.map { response -> wordcounter.countWords(response.string(), keywords) }
-                ?.onErrorReturn { 0 }
+                ?.onErrorReturn { 0.0 }
                 ?.subscribeOn(Schedulers.computation())}
         return Observable.combineLatest(searches,
                 object : Function<Array<Any>, HeuristicOutput> {
                     override fun apply(t: Array<Any>): HeuristicOutput {
-                        val builder = ImmutableList.builder<Int>()
+                        val builder = ImmutableList.builder<Double>()
                         for (item in t) {
-                            if (item is Int) {
+                            if (item is Double) {
                                 builder.add(item)
                             }
                         }
                         val scores = builder.build()
                         if (scores.size != input.answers.size) {
                             consoleLogStream.write("WikiAnswer search failed")
-                            consoleLogStream.writeDivider()
-                            return HeuristicOutput(ImmutableMap.of<String, Int>())
+                            return HeuristicOutput(ImmutableMap.of<String, Double>())
                         }
 
-                        val results = input.answers
-                                .withIndex()
-                                .associateBy({it.value}, {scores[it.index]})
-                        consoleLogStream.write("WikiAnswerr: \n Matching keywords "
-                                + keywords + "\nResults: \n"+ results )
-                        consoleLogStream.writeDivider()
-                        return HeuristicOutput(ImmutableMap.copyOf(results))
+                        val resultsMerger = ResultsMerger()
+
+                        val results = resultsMerger.mergeResults(scores, input)
+                        consoleLogStream.write("WikiAnswer Search: \n Matching keywords "
+                                + keywords + "\n\nResults: \n"+ results.scores )
+                        return results
                     }
                 })
     }
@@ -58,7 +57,8 @@ class WikiAnswerSearchHeuristic(
         val commonWords = CommonWords()
         return question
                 .toLowerCase()
+                .replace("?", "")
                 .split(" ")
-                .filter { word -> !commonWords.WORD_SET.contains(word) && word.length > 0 }
+                .filter { word -> !commonWords.WORD_SET.contains(word) && word.length > 2 }
     }
 }

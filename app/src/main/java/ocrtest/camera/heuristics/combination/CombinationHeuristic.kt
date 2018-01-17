@@ -23,22 +23,22 @@ class CombinationHeuristic(val heuristics: List<Heuristic>) : Heuristic {
     }
 
     fun filterEmptyResults(output: HeuristicOutput): Boolean {
-        return output.scores.values.sum() != 0
+        return output.scores.values.sum() != 0.0
     }
 
-    fun reduceToRankingScore(output: HeuristicOutput): Map<String, Int> {
+    fun reduceToRankingScore(output: HeuristicOutput): Map<String, Double> {
         return output.scores.keys
                 .sortedByDescending { key -> output.scores.get(key) }
                 .withIndex()
                 .associateBy(
                         { indexedValue -> indexedValue.value },
-                        { indexedValue -> indexedValue.index })
+                        { indexedValue -> indexedValue.index.toDouble() })
     }
 
-    fun combineRankings(rankings: List<Map<String, Int>>): HeuristicOutput {
-        val totals = HashMap<String, Int>()
+    fun combineRankings(rankings: List<Map<String, Double>>): HeuristicOutput {
+        val totals = HashMap<String, Double>()
         rankings.forEach { ranking ->
-            ranking.forEach { key, value -> totals.put(key, totals.get(key) ?: 0 + value) }
+            ranking.forEach { key, value -> totals.put(key, totals.get(key) ?: 0.0 + value) }
         }
         return HeuristicOutput(
                 ImmutableMap.copyOf(
@@ -46,7 +46,7 @@ class CombinationHeuristic(val heuristics: List<Heuristic>) : Heuristic {
                                 .withIndex()
                                 .associateBy(
                                         { indexedValue -> indexedValue.value },
-                                        { indexedValue -> indexedValue.index }
+                                        { indexedValue -> indexedValue.index.toDouble() }
                                 )))
     }
 }
