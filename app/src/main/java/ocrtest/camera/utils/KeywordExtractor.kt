@@ -14,15 +14,15 @@ class KeywordExtractor() {
         var inQuotes = false
         var keywordBuilder = StringBuilder()
         for (token in tokens) {
-             if (token.startsWith('"')) {
+             if (token.startsWith('"') || token.startsWith('\'')) {
                 inQuotes = true
                 keywordBuilder.append(token)
-                if (token.endsWith('"')) {
+                if (token.endsWith('"') || token.endsWith('\'')) {
                     list.add(keywordBuilder.toString())
                     keywordBuilder = StringBuilder()
                     inQuotes = false
                 }
-            } else if (token.endsWith('"')) {
+            } else if (token.endsWith('"') || token.endsWith('\'')) {
                 keywordBuilder.append(" ")
                 keywordBuilder.append(token)
                 list.add(keywordBuilder.toString())
@@ -47,5 +47,10 @@ class KeywordExtractor() {
 
         val commonWords = CommonWords()
         return list.filter { word -> !commonWords.WORD_SET.contains(word.toLowerCase()) }
+                .map { word -> word.replace("\'s", "") }
+    }
+
+    fun sanitizeKeyword(keyword: String) : String {
+        return keyword.replace("\'s", "")
     }
 }

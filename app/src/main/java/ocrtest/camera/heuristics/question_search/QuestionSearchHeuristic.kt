@@ -2,6 +2,7 @@ package ocrtest.camera.heuristics.question_search
 
 import com.google.common.collect.ImmutableMap
 import io.reactivex.Observable
+import io.reactivex.android.schedulers.AndroidSchedulers
 import io.reactivex.functions.Function
 import io.reactivex.schedulers.Schedulers
 import ocrtest.camera.heuristics.Heuristic
@@ -37,6 +38,7 @@ class QuestionSearchHeuristic(
 
         return service.search(input.question)
                 .subscribeOn(Schedulers.computation())
+                .observeOn(AndroidSchedulers.mainThread())
                 .map(object : Function<ResponseBody, HeuristicOutput>{
                     override fun apply(body: ResponseBody): HeuristicOutput {
                         val lowerCase = body.string().toLowerCase()

@@ -14,12 +14,13 @@ import android.hardware.camera2.CaptureRequest
 import android.support.v7.app.AppCompatActivity
 import android.os.Bundle
 import android.support.v4.content.ContextCompat
+import android.text.Html
 import android.util.Base64
 import android.view.Surface
 import android.view.TextureView
 import android.view.View
 import android.widget.Button
-import android.widget.TextView
+import android.widget.FrameLayout
 import com.facebook.stetho.okhttp3.StethoInterceptor
 import com.google.common.collect.ImmutableList
 import com.jakewharton.retrofit2.adapter.rxjava2.RxJava2CallAdapterFactory
@@ -29,6 +30,7 @@ import io.reactivex.schedulers.Schedulers
 import ocrtest.camera.heuristics.HeuristicInput
 import ocrtest.camera.heuristics.HeuristicOutput
 import ocrtest.camera.heuristics.combination.CombinationHeuristic
+import ocrtest.camera.heuristics.google_answer_search.GoogleAnswerSearchHeuristic
 import ocrtest.camera.heuristics.question_answer_search.QuestionAnswerSearchHeuristic
 import ocrtest.camera.heuristics.question_search.QuestionSearchHeuristic
 import ocrtest.camera.heuristics.wiki_answer_search.WikiAnswerSearchHeuristic
@@ -39,10 +41,12 @@ import ocrtest.camera.services.GoogleSearchService
 import ocrtest.camera.services.WikipediaSearchService
 import ocrtest.camera.utils.ConsoleLogStream
 import ocrtest.camera.widgets.BoundingBoxView
+import ocrtest.camera.widgets.TabbedConsoleView
 import okhttp3.OkHttpClient
 import retrofit2.Retrofit
 import retrofit2.converter.gson.GsonConverterFactory
 import java.io.ByteArrayOutputStream
+import java.util.regex.Pattern
 
 /**
  * Written with sample from
@@ -54,39 +58,49 @@ class MainActivity : AppCompatActivity(), TextureView.SurfaceTextureListener {
     val GOOGLE_VISION_BASE_URL = "https://vision.googleapis.com"
     val WIKIPEDIA_SEARCH_BASE_URL = "https://en.wikipedia.org"
     val GOOGLE_VISION_API_KEY = ""
+    val PAGE_ANALYSIS = "Analysis"
+    val PAGE_QUESTION = "?"
+    val PAGE_ANSWER_1 = "A1"
+    val PAGE_ANSWER_2 = "A2"
+    val PAGE_ANSWER_3 = "A3"
 
     var boundingBoxView: BoundingBoxView? = null
     var captureButton : Button? = null
     var cloudVisionService : CloudVisionService? = null
-    var console : TextView? = null
     var consoleButton: Button? = null
-    var consoleWindow: View? = null
     var previewSurface : TextureView? = null
     var cameraManager : CameraManager? = null
     var camera : CameraDevice? = null
     var googleSearchService: GoogleSearchService? = null
     var consoleLogs : ConsoleLogStream = ConsoleLogStream()
     var wikipediaSearchService : WikipediaSearchService? = null
+    var tabbedConsole : TabbedConsoleView? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
         boundingBoxView = findViewById(R.id.bounding_box)
         captureButton = findViewById(R.id.capture_button)
-        console = findViewById(R.id.console)
         consoleButton = findViewById(R.id.console_button)
-        consoleWindow = findViewById(R.id.console_window)
         previewSurface = findViewById(R.id.preview_surface)
         previewSurface?.surfaceTextureListener = this
+        tabbedConsole = TabbedConsoleView(this, ImmutableList.of(
+                PAGE_ANALYSIS, PAGE_QUESTION, PAGE_ANSWER_1, PAGE_ANSWER_2, PAGE_ANSWER_3))
+
+        var contentContainer : FrameLayout = findViewById(R.id.contentContainer)
+        contentContainer.addView(tabbedConsole)
+        tabbedConsole?.visibility = View.GONE
+
         captureButton?.setOnClickListener {
+            tabbedConsole?.clearLoadStates()
+            tabbedConsole?.visibility = View.VISIBLE
             capture()
-            consoleWindow?.visibility = View.VISIBLE
         }
         consoleButton?.setOnClickListener {
-            if (consoleWindow?.visibility == View.VISIBLE) {
-                consoleWindow?.visibility = View.GONE
+            if (tabbedConsole?.visibility == View.VISIBLE) {
+                tabbedConsole?.visibility = View.GONE
             } else {
-                consoleWindow?.visibility = View.VISIBLE
+                tabbedConsole?.visibility = View.VISIBLE
             }
         }
         cameraManager = getSystemService(Context.CAMERA_SERVICE) as CameraManager
@@ -98,7 +112,9 @@ class MainActivity : AppCompatActivity(), TextureView.SurfaceTextureListener {
                 .create(WikipediaSearchService::class.java)
         consoleLogs.logs()
                 .observeOn(AndroidSchedulers.mainThread())
-                .subscribe({log -> console?.append(log+"\n====================\n")})
+                .subscribe({log -> tabbedConsole
+                        ?.getTextView(PAGE_ANALYSIS)
+                        ?.append(log+"\n====================\n")})
     }
 
     override fun onSurfaceTextureSizeChanged(surface: SurfaceTexture?, width: Int, height: Int) {
@@ -161,7 +177,8 @@ class MainActivity : AppCompatActivity(), TextureView.SurfaceTextureListener {
             surfaces.add(surface)
         }
 
-        previewSurface?.surfaceTexture?.setDefaultBufferSize(640, 480)
+        previewSurface?.surfaceTexture?.setDefaultBufferSize(
+                previewSurface?.width?:640, previewSurface?.height?:480)
         var previewRequestBuilder = camera?.createCaptureRequest(CameraDevice.TEMPLATE_PREVIEW)
         if (surface != null) {
             previewRequestBuilder?.addTarget(surface as? Surface)
@@ -204,10 +221,14 @@ class MainActivity : AppCompatActivity(), TextureView.SurfaceTextureListener {
                     Math.abs(startX - endX),
                     Math.abs(startY - endY))
         }
-        bitmap?.compress(Bitmap.CompressFormat.JPEG, 40, stream)
-        var byteArray = stream.toByteArray()
-        console?.setText("")
-        solveQuestion(byteArray)
+
+        Observable.fromCallable{
+            bitmap?.compress(Bitmap.CompressFormat.WEBP, 50, stream)
+            var byteArray = stream.toByteArray()
+            solveQuestion(byteArray)}
+                .subscribeOn(Schedulers.computation())
+                .subscribe {  }
+        tabbedConsole?.getTextView(PAGE_ANALYSIS)?.setText("")
     }
 
     fun solveQuestion(image: ByteArray) {
@@ -220,6 +241,7 @@ class MainActivity : AppCompatActivity(), TextureView.SurfaceTextureListener {
                        ImmutableList.builder<CloudVisionRequest>().add(request).build())
         cloudVisionService?.annotate(GOOGLE_VISION_API_KEY, requests)
                 ?.map { responses -> responses.toTriviaQuestion() }
+                ?.doOnNext{ question -> loadDefinitionGooglePage(question)}
                 ?.doOnNext{ question -> if (question.question.length == 0) consoleLogs.write("could not read question.")}
                 ?.filter{ question -> question.question.length > 0}
                 ?.subscribeOn(Schedulers.computation())
@@ -231,12 +253,35 @@ class MainActivity : AppCompatActivity(), TextureView.SurfaceTextureListener {
                         {answer -> showResults(answer)})
     }
 
+    fun loadDefinitionGooglePage(question: TriviaQuestion) {
+        val pages = ImmutableList.of(PAGE_ANSWER_1, PAGE_ANSWER_2, PAGE_ANSWER_3)
+        question.choices.forEachIndexed { index, it ->
+            loadGoogleQueryToPage("What is " + it, pages.get(index))
+        }
+        loadGoogleQueryToPage(question.question, PAGE_QUESTION)
+    }
+
+    fun loadGoogleQueryToPage(query: String, page: String) {
+        val regex = Pattern.compile("\\A.*About[0-9, ]+results").toRegex()
+        googleSearchService?.search(query)
+                ?.subscribeOn(Schedulers.computation())
+                ?.observeOn(AndroidSchedulers.mainThread())
+                ?.map { response -> response.string().replace(regex, "") }
+                ?.onErrorReturn { "Page load failed =(" }
+                ?.subscribe{bodyText ->
+                    tabbedConsole?.markPageLoaded(page)
+                    tabbedConsole?.getTextView(page)?.setText(
+                            Html.fromHtml(bodyText, Html.FROM_HTML_MODE_COMPACT))}
+    }
+
     fun calculateHeuristics(question: TriviaQuestion) : Observable<HeuristicOutput> {
+        val answerSearch = GoogleAnswerSearchHeuristic(googleSearchService, consoleLogs)
         val questionAnswerSearch = QuestionAnswerSearchHeuristic(googleSearchService, consoleLogs)
         val questionSearch = QuestionSearchHeuristic(googleSearchService, consoleLogs)
         val wikiQuestionSearch = WikiQuestionSearchHeuristic(wikipediaSearchService, consoleLogs)
         val wikiAnswerSearch = WikiAnswerSearchHeuristic(wikipediaSearchService, consoleLogs)
         val heuristic = CombinationHeuristic(ImmutableList.of(
+                answerSearch,
                 questionSearch,
                 questionAnswerSearch,
                 wikiQuestionSearch,
@@ -259,6 +304,7 @@ class MainActivity : AppCompatActivity(), TextureView.SurfaceTextureListener {
     fun showResults(output: HeuristicOutput) {
         val answers = output.scores.keys.sortedByDescending { it -> output.scores[it] }
         consoleLogs.write("Descending order in likelihood: " + answers.toString())
+        tabbedConsole?.markPageLoaded(PAGE_ANALYSIS)
     }
 
     class CameraCallback(var activity : MainActivity) : CameraDevice.StateCallback() {

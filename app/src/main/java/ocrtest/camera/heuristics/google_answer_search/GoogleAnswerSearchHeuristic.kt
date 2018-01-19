@@ -1,4 +1,4 @@
-package ocrtest.camera.heuristics.wiki_answer_search
+package ocrtest.camera.heuristics.google_answer_search
 
 import com.google.common.collect.ImmutableList
 import com.google.common.collect.ImmutableMap
@@ -9,20 +9,23 @@ import ocrtest.camera.heuristics.Heuristic
 import ocrtest.camera.heuristics.HeuristicInput
 import ocrtest.camera.heuristics.HeuristicOutput
 import ocrtest.camera.heuristics.ResultsMerger
-import ocrtest.camera.services.WikipediaSearchService
-import ocrtest.camera.utils.*
+import ocrtest.camera.services.GoogleSearchService
+import ocrtest.camera.utils.CommonWords
+import ocrtest.camera.utils.ConsoleLogStream
+import ocrtest.camera.utils.KeywordExtractor
+import ocrtest.camera.utils.WordCounter
 
 /**
  * Heuristic to look up each answer individually to check how many question key words match.
  */
-class WikiAnswerSearchHeuristic(
-        val wikipediaSearchService: WikipediaSearchService?,
+class GoogleAnswerSearchHeuristic(
+        val googleSearchService: GoogleSearchService?,
         val consoleLogStream: ConsoleLogStream) : Heuristic {
     override fun compute(input: HeuristicInput): Observable<HeuristicOutput> {
         val keywords = getKeywordsFromQuestion(input.question)
         val wordcounter = WordCounter()
         val searches = input.answers.map {
-            answer -> wikipediaSearchService?.search(answer)
+            answer -> googleSearchService?.search(answer)
                 ?.map { response -> response.string().toLowerCase()}
                 ?.map { response -> wordcounter.countWords(response, keywords) }
                 ?.onErrorReturn { 0.0 }
@@ -38,14 +41,14 @@ class WikiAnswerSearchHeuristic(
                         }
                         val scores = builder.build()
                         if (scores.size != input.answers.size) {
-                            consoleLogStream.write("WikiAnswer search failed")
+                            consoleLogStream.write("Google answer search failed")
                             return HeuristicOutput(ImmutableMap.of<String, Double>())
                         }
 
                         val resultsMerger = ResultsMerger()
 
                         val results = resultsMerger.mergeResults(scores, input)
-                        consoleLogStream.write("WikiAnswer Search: \n Matching keywords "
+                        consoleLogStream.write("Google answer Search: \n Matching keywords "
                                 + keywords + "\n\nResults: \n"+ results.scores )
                         return results
                     }
