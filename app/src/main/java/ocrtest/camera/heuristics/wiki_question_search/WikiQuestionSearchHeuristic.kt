@@ -42,9 +42,9 @@ class WikiQuestionSearchHeuristic(
                 val totals = input.answers.mapIndexed { index, s ->
                     t.fold (0.0, {total, any -> (any as List<Double>).get(index)})}
                 val results = resultsMerger.mergeResults(totals, input)
-                consoleLogStream.write("WikiQuestionSearch: \nUsing question keywords "
+                consoleLogStream.write("WikiQuestionSearch (Terms "
                         + keywords
-                        + "\n\nResults: \n"
+                        + ")\n\nResults: \n"
                         + results.scores )
                 return results
             }

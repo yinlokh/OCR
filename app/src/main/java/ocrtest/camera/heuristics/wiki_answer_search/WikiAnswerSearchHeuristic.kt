@@ -45,8 +45,8 @@ class WikiAnswerSearchHeuristic(
                         val resultsMerger = ResultsMerger()
 
                         val results = resultsMerger.mergeResults(scores, input)
-                        consoleLogStream.write("WikiAnswer Search: \n Matching keywords "
-                                + keywords + "\n\nResults: \n"+ results.scores )
+                        consoleLogStream.write("WikiAnswer Search (Keywords "
+                                + keywords + ")\n\nResults: \n"+ results.scores )
                         return results
                     }
                 })

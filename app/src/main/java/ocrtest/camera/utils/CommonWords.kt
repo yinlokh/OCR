@@ -39,11 +39,13 @@ class CommonWords {
                     "when",
                     "where",
                     "which",
+                    "how",
                     "these",
                     "would",
                     "you",
                     "both",
                     "any",
-                    "not")
+                    "not",
+                    "it")
     )
 }

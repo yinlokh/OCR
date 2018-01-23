@@ -4,6 +4,7 @@ import android.Manifest
 import android.content.Context
 import android.content.pm.PackageManager
 import android.graphics.Bitmap
+import android.graphics.Color
 import android.graphics.SurfaceTexture
 import android.hardware.camera2.CameraCaptureSession
 import android.hardware.camera2.CameraCharacteristics.LENS_FACING
@@ -27,6 +28,7 @@ import com.jakewharton.retrofit2.adapter.rxjava2.RxJava2CallAdapterFactory
 import io.reactivex.Observable
 import io.reactivex.android.schedulers.AndroidSchedulers
 import io.reactivex.schedulers.Schedulers
+import kotlinx.android.synthetic.main.activity_main.*
 import ocrtest.camera.heuristics.HeuristicInput
 import ocrtest.camera.heuristics.HeuristicOutput
 import ocrtest.camera.heuristics.combination.CombinationHeuristic
@@ -46,6 +48,7 @@ import okhttp3.OkHttpClient
 import retrofit2.Retrofit
 import retrofit2.converter.gson.GsonConverterFactory
 import java.io.ByteArrayOutputStream
+import java.util.concurrent.TimeUnit
 import java.util.regex.Pattern
 
 /**
@@ -91,10 +94,12 @@ class MainActivity : AppCompatActivity(), TextureView.SurfaceTextureListener {
         contentContainer.addView(tabbedConsole)
         tabbedConsole?.visibility = View.GONE
 
+        var timeElapsed = 0;
         captureButton?.setOnClickListener {
             tabbedConsole?.clearLoadStates()
             tabbedConsole?.visibility = View.VISIBLE
             capture()
+            timeElapsed = 0
         }
         consoleButton?.setOnClickListener {
             if (tabbedConsole?.visibility == View.VISIBLE) {
@@ -103,6 +108,19 @@ class MainActivity : AppCompatActivity(), TextureView.SurfaceTextureListener {
                 tabbedConsole?.visibility = View.VISIBLE
             }
         }
+
+        Observable.interval(300, TimeUnit.MILLISECONDS)
+                .observeOn(AndroidSchedulers.mainThread())
+                .subscribe{
+                    timer.setText("Time Elapsed: " + timeElapsed/1000 + " seconds")
+                    if (timeElapsed > 7000) {
+                        timer.setBackgroundColor(Color.RED)
+                    } else if (timeElapsed > 5000) {
+                        timer.setBackgroundColor(Color.YELLOW)
+                    } else {
+                        timer.setBackgroundColor(Color.WHITE)
+                    }
+                    timeElapsed+=300}
         cameraManager = getSystemService(Context.CAMERA_SERVICE) as CameraManager
         cloudVisionService = getRetrofit(GOOGLE_VISION_BASE_URL)
                 .create(CloudVisionService::class.java)
@@ -303,7 +321,7 @@ class MainActivity : AppCompatActivity(), TextureView.SurfaceTextureListener {
 
     fun showResults(output: HeuristicOutput) {
         val answers = output.scores.keys.sortedByDescending { it -> output.scores[it] }
-        consoleLogs.write("Descending order in likelihood: " + answers.toString())
+        consoleLogs.write("Descending in likelihood: \n" + answers.toString())
         tabbedConsole?.markPageLoaded(PAGE_ANALYSIS)
     }
 

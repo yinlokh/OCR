@@ -48,8 +48,8 @@ class GoogleAnswerSearchHeuristic(
                         val resultsMerger = ResultsMerger()
 
                         val results = resultsMerger.mergeResults(scores, input)
-                        consoleLogStream.write("Google answer Search: \n Matching keywords "
-                                + keywords + "\n\nResults: \n"+ results.scores )
+                        consoleLogStream.write("Google Answers (Keywords "
+                                + keywords + ")\n\nResults: \n"+ results.scores )
                         return results
                     }
                 })

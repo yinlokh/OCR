@@ -47,9 +47,9 @@ class QuestionSearchHeuristic(
                         val resultMerger = ResultsMerger()
                         val results = resultMerger.mergeResults(scores, input)
                         consoleLogStream.write((
-                                "QuestionOnly Search matching terms: \n"
+                                "QuestionOnly Search (Terms: "
                                         + answerToWords
-                                        + "\n\nQuestionOnly Search Results:"
+                                        + ")\n\nQuestionOnly Search Results:"
                                         + "\n" + results.scores))
                         return results
                     }
