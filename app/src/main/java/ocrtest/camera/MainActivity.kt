@@ -37,6 +37,7 @@ import ocrtest.camera.heuristics.question_search.QuestionSearchHeuristic
 import ocrtest.camera.heuristics.wiki_answer_search.WikiAnswerSearchHeuristic
 import ocrtest.camera.heuristics.wiki_question_search.WikiQuestionSearchHeuristic
 import ocrtest.camera.ocr.cloud_vision.CloudVisionOCRStep
+import ocrtest.camera.ocr.tesseract.TesseractOCRStep
 import ocrtest.camera.services.CloudVisionService
 import ocrtest.camera.services.GoogleSearchService
 import ocrtest.camera.services.WikipediaSearchService
@@ -46,7 +47,6 @@ import ocrtest.camera.widgets.TabbedConsoleView
 import okhttp3.OkHttpClient
 import retrofit2.Retrofit
 import retrofit2.converter.gson.GsonConverterFactory
-import java.io.ByteArrayOutputStream
 import java.util.concurrent.TimeUnit
 import java.util.regex.Pattern
 
@@ -76,6 +76,8 @@ class MainActivity : AppCompatActivity(), TextureView.SurfaceTextureListener {
     var consoleLogs : ConsoleLogStream = ConsoleLogStream()
     var wikipediaSearchService : WikipediaSearchService? = null
     var tabbedConsole : TabbedConsoleView? = null
+    val ocrStep = CloudVisionOCRStep(cloudVisionService)
+    val tesseract = TesseractOCRStep(this)
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -223,7 +225,6 @@ class MainActivity : AppCompatActivity(), TextureView.SurfaceTextureListener {
     }
 
     fun capture() {
-        var stream = ByteArrayOutputStream()
         var startX : Int = boundingBoxView?.boxStartX?.toInt()?:0
         var startY : Int = boundingBoxView?.boxStartY?.toInt()?:0
         var endX : Int = boundingBoxView?.boxEndX?.toInt()?:0
@@ -247,7 +248,6 @@ class MainActivity : AppCompatActivity(), TextureView.SurfaceTextureListener {
             return;
         }
 
-        val ocrStep = CloudVisionOCRStep(cloudVisionService)
         ocrStep.performOCR(image)
                 ?.doOnNext{ question -> loadDefinitionGooglePage(question)}
                 ?.doOnNext{ question -> if (question.question.length == 0) consoleLogs.write("could not read question.")}
