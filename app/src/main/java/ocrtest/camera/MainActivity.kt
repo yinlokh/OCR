@@ -16,7 +16,6 @@ import android.support.v7.app.AppCompatActivity
 import android.os.Bundle
 import android.support.v4.content.ContextCompat
 import android.text.Html
-import android.util.Base64
 import android.view.Surface
 import android.view.TextureView
 import android.view.View
@@ -37,7 +36,7 @@ import ocrtest.camera.heuristics.question_answer_search.QuestionAnswerSearchHeur
 import ocrtest.camera.heuristics.question_search.QuestionSearchHeuristic
 import ocrtest.camera.heuristics.wiki_answer_search.WikiAnswerSearchHeuristic
 import ocrtest.camera.heuristics.wiki_question_search.WikiQuestionSearchHeuristic
-import ocrtest.camera.models.*
+import ocrtest.camera.ocr.cloud_vision.CloudVisionOCRStep
 import ocrtest.camera.services.CloudVisionService
 import ocrtest.camera.services.GoogleSearchService
 import ocrtest.camera.services.WikipediaSearchService
@@ -60,7 +59,6 @@ class MainActivity : AppCompatActivity(), TextureView.SurfaceTextureListener {
     val GOOGLE_SEARCH_BASE_URL = "http://www.google.com"
     val GOOGLE_VISION_BASE_URL = "https://vision.googleapis.com"
     val WIKIPEDIA_SEARCH_BASE_URL = "https://en.wikipedia.org"
-    val GOOGLE_VISION_API_KEY = ""
     val PAGE_ANALYSIS = "Analysis"
     val PAGE_QUESTION = "?"
     val PAGE_ANSWER_1 = "A1"
@@ -240,25 +238,17 @@ class MainActivity : AppCompatActivity(), TextureView.SurfaceTextureListener {
                     Math.abs(startY - endY))
         }
 
-        Observable.fromCallable{
-            bitmap?.compress(Bitmap.CompressFormat.WEBP, 50, stream)
-            var byteArray = stream.toByteArray()
-            solveQuestion(byteArray)}
-                .subscribeOn(Schedulers.computation())
-                .subscribe {  }
+        solveQuestion(bitmap)
         tabbedConsole?.getTextView(PAGE_ANALYSIS)?.setText("")
     }
 
-    fun solveQuestion(image: ByteArray) {
-        val request = CloudVisionRequest(
-                CloudVisionImage(Base64.encodeToString(image, 0)),
-                CloudVisionFeatures("TEXT_DETECTION", "10")
-        )
+    fun solveQuestion(image: Bitmap?) {
+        if (image == null) {
+            return;
+        }
 
-       val requests = CloudVisionRequests(
-                       ImmutableList.builder<CloudVisionRequest>().add(request).build())
-        cloudVisionService?.annotate(GOOGLE_VISION_API_KEY, requests)
-                ?.map { responses -> responses.toTriviaQuestion() }
+        val ocrStep = CloudVisionOCRStep(cloudVisionService)
+        ocrStep.performOCR(image)
                 ?.doOnNext{ question -> loadDefinitionGooglePage(question)}
                 ?.doOnNext{ question -> if (question.question.length == 0) consoleLogs.write("could not read question.")}
                 ?.filter{ question -> question.question.length > 0}
@@ -271,12 +261,12 @@ class MainActivity : AppCompatActivity(), TextureView.SurfaceTextureListener {
                         {answer -> showResults(answer)})
     }
 
-    fun loadDefinitionGooglePage(question: TriviaQuestion) {
+    fun loadDefinitionGooglePage(input: HeuristicInput) {
         val pages = ImmutableList.of(PAGE_ANSWER_1, PAGE_ANSWER_2, PAGE_ANSWER_3)
-        question.choices.forEachIndexed { index, it ->
+        input.answers.forEachIndexed { index, it ->
             loadGoogleQueryToPage("What is " + it, pages.get(index))
         }
-        loadGoogleQueryToPage(question.question, PAGE_QUESTION)
+        loadGoogleQueryToPage(input.question, PAGE_QUESTION)
     }
 
     fun loadGoogleQueryToPage(query: String, page: String) {
@@ -292,7 +282,7 @@ class MainActivity : AppCompatActivity(), TextureView.SurfaceTextureListener {
                             Html.fromHtml(bodyText, Html.FROM_HTML_MODE_COMPACT))}
     }
 
-    fun calculateHeuristics(question: TriviaQuestion) : Observable<HeuristicOutput> {
+    fun calculateHeuristics(input: HeuristicInput) : Observable<HeuristicOutput> {
         val answerSearch = GoogleAnswerSearchHeuristic(googleSearchService, consoleLogs)
         val questionAnswerSearch = QuestionAnswerSearchHeuristic(googleSearchService, consoleLogs)
         val questionSearch = QuestionSearchHeuristic(googleSearchService, consoleLogs)
@@ -304,19 +294,19 @@ class MainActivity : AppCompatActivity(), TextureView.SurfaceTextureListener {
                 questionAnswerSearch,
                 wikiQuestionSearch,
                 wikiAnswerSearch))
-        return heuristic.compute(HeuristicInput(question))
+        return heuristic.compute(input)
     }
 
-    fun showOCRText(question: TriviaQuestion) {
+    fun showOCRText(question: HeuristicInput) {
         consoleLogs.write(
                 "Question: "
                         + question.question
                         + "\nChoice 1: "
-                        + question.choices[0]
+                        + question.answers[0]
                         + "\nChoice 2: "
-                        + question.choices[1]
+                        + question.answers[1]
                         + "\nChoice 3: "
-                        + question.choices[2])
+                        + question.answers[2])
     }
 
     fun showResults(output: HeuristicOutput) {
